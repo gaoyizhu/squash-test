@@ -1,14 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head><!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-XYDPDYT8VF"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-XYDPDYT8VF');
-</script>
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VESTA SQUASH · 16型壁球人格测试</title>
@@ -1983,6 +1975,14 @@ async function renderPosterCanvas(type, p) {
     }
     y += traitLineH + 4;  // 到下一条 trait 的起始位置
   }
+
+  // ---- 水印：在最后一条致命特征后面，卡片内侧淡淡显示 ----
+  ctx.textAlign = 'right';
+  ctx.fillStyle = MOSS;
+  ctx.globalAlpha = 0.35;
+  ctx.font = 'italic 10px "Fraunces", serif';
+  ctx.fillText('By Tony Gao', cardX + cardW - 24, y + 10);
+  ctx.globalAlpha = 1;
 
   // ---- 底部 ----
   ctx.textAlign = 'center';
