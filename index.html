@@ -1,14 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head> <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-XYDPDYT8VF"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-XYDPDYT8VF');
-</script>
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VESTA SQUASH · 16型壁球人格测试</title>
@@ -346,18 +338,29 @@ h1.title .highlight {
   transition: all 0.15s;
   position: relative;
   line-height: 1.5;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.option:hover {
-  background: var(--ink);
-  color: var(--cream);
-  transform: translateX(4px);
+/* 只在支持真实 hover（桌面鼠标）的设备上应用 hover 样式，避免手机触摸后样式粘住 */
+@media (hover: hover) and (pointer: fine) {
+  .option:hover {
+    background: var(--ink);
+    color: var(--cream);
+    transform: translateX(4px);
+  }
 }
 
 .option:active {
   background: var(--ink);
   color: var(--cream);
   transform: scale(0.98);
+}
+
+/* 只有键盘 Tab 访问才显示 focus 框；鼠标/触摸点击不留痕 */
+.option:focus-visible {
+  outline: 2px dashed var(--blood);
+  outline-offset: 2px;
 }
 
 .option::before {
@@ -369,9 +372,11 @@ h1.title .highlight {
   transition: all 0.15s;
 }
 
-.option:hover::before {
-  color: var(--mustard);
-  transform: translateX(4px);
+@media (hover: hover) and (pointer: fine) {
+  .option:hover::before {
+    color: var(--mustard);
+    transform: translateX(4px);
+  }
 }
 
 .quiz-footnote {
@@ -1484,6 +1489,10 @@ function startQuiz() {
 }
 
 function renderQuestion() {
+  // 主动移除当前焦点，避免上一题的按钮焦点残留到下一题
+  if (document.activeElement && document.activeElement.blur) {
+    document.activeElement.blur();
+  }
   // 防御：如果越界了，直接走结果页，避免读 undefined
   if (currentQ >= totalQuestions || currentQ < 0) {
     showResult();
