@@ -1,14 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
-<head><!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-XYDPDYT8VF"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-XYDPDYT8VF');
-</script>
+<head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VESTA SQUASH · 16型壁球人格测试</title>
@@ -363,6 +355,16 @@ h1.title .highlight {
   background: var(--ink);
   color: var(--cream);
   transform: scale(0.98);
+}
+
+/* JS 控制的"已选中"状态，在从当前题跳转到下一题的过渡期间保持视觉反馈 */
+.option.selected {
+  background: var(--ink);
+  color: var(--cream);
+  transform: scale(0.98);
+}
+.option.selected::before {
+  color: var(--mustard);
 }
 
 /* 只有键盘 Tab 访问才显示 focus 框；鼠标/触摸点击不留痕 */
@@ -1536,12 +1538,12 @@ function renderQuestion() {
     btn.className = 'option';
     btn.textContent = opt.text;
     btn.style.animationDelay = `${i * 0.1}s`;
-    btn.onclick = () => selectOption(opt.dim);
+    btn.onclick = () => selectOption(opt.dim, btn);
     container.appendChild(btn);
   });
 }
 
-function selectOption(dim) {
+function selectOption(dim, clickedBtn) {
   // 防御：过渡期间不响应点击
   if (isTransitioning) return;
   if (currentQ >= totalQuestions) return;
@@ -1551,23 +1553,35 @@ function selectOption(dim) {
   history.push(dim);  // 记录这题选的 dim
   currentQ++;
 
-  // 立刻禁用所有选项按钮，防止重复点击
+  // 给被点击的按钮加 .selected class，让用户看到"选中"反馈
+  // 其它按钮变淡，突出当前选中项
   document.querySelectorAll('.option').forEach(b => {
     b.disabled = true;
     b.style.pointerEvents = 'none';
+    if (b === clickedBtn) {
+      b.classList.add('selected');
+    } else {
+      b.style.opacity = '0.35';
+    }
   });
 
   if (currentQ >= totalQuestions) {
-    isTransitioning = false;
-    showResult();
+    // 最后一题也延迟一下，让用户能看到"选中"效果再切到结果页
+    setTimeout(() => {
+      isTransitioning = false;
+      showResult();
+    }, 280);
   } else {
-    document.getElementById('quiz').style.opacity = '0.3';
+    // 稍微拉长过渡时间到 280ms，让"选中"反馈更明显
+    setTimeout(() => {
+      document.getElementById('quiz').style.opacity = '0.3';
+    }, 180);
     setTimeout(() => {
       renderQuestion();
       document.getElementById('quiz').style.opacity = '1';
       window.scrollTo({ top: 0, behavior: 'smooth' });
       isTransitioning = false;
-    }, 150);
+    }, 330);
   }
 }
 
@@ -1748,11 +1762,6 @@ function wrapText(ctx, text, maxWidth) {
 }
 
 async function renderPosterCanvas(type, p) {
-  const W = 540, H = 960;
-  const canvas = document.createElement('canvas');
-  canvas.width = W; canvas.height = H;
-  const ctx = canvas.getContext('2d');
-
   const INK = '#14201a';
   const CREAM = '#f3ead3';
   const PAPER = '#f7f0dc';
@@ -1760,13 +1769,70 @@ async function renderPosterCanvas(type, p) {
   const MOSS = '#2d4a3a';
   const MOSS_DEEP = '#1a2e23';
 
+  const W = 540;
+  // 先用一个 measurement canvas 计算内容总高度
+  const measureCanvas = document.createElement('canvas');
+  const mctx = measureCanvas.getContext('2d');
+
+  const cardX = 32;
+  const cardW = W - 64;
+  const innerW = cardW - 60;  // 卡片左右 padding 30px 各一边
+  const traitTextW = cardW - 80;
+
+  // 计算 desc 和 traits 折行
+  mctx.font = '15px "Noto Serif SC", serif';
+  const descLines = wrapText(mctx, p.desc, innerW);
+
+  mctx.font = '13px "Noto Serif SC", serif';
+  const traitLines = [];  // 每条 trait 可能折成多行
+  for (const trait of p.traits) {
+    traitLines.push(wrapText(mctx, trait, traitTextW));
+  }
+  const traitLineH = 22;
+
+  // ---- 计算卡片各段垂直布局 ----
+  // 卡片内结构：类型代码 → 名字 → 昵称 → 小人 → 分隔 → 人格画像标题 → 描述 → 致命特征标题 → traits → 底部留白
+  // 所有 y 值对应 fillText 的 baseline
+  const cardTopPad = 40;        // 卡片顶到类型代码 baseline
+  const codeToName = 60;         // 类型代码 baseline 到名字 baseline（需 > 名字字号的 ~90% 防重叠）
+  const nameToNick = 34;        // 名字 baseline 到昵称 baseline
+  const nickToChar = 28;        // 昵称 baseline 到小人框顶
+  const charFrameH = 220;        // 小人框高
+  const charToDivider = 30;      // 小人框底到分隔线
+  const dividerToDescLabel = 28; // 分隔线到"人格画像" baseline
+  const descLabelToBody = 30;    // "人格画像" baseline 到描述第一行 baseline
+  const descLineH = 26;
+  const descBodyH = (descLines.length - 1) * descLineH;  // 第一行已经到 baseline，剩余行的高度
+  const descToTraitLabel = 30;   // 最后一行 desc baseline 到"致命特征" baseline
+  const traitLabelToBody = 28;
+  let traitsBodyH = 0;
+  for (const tl of traitLines) {
+    traitsBodyH += tl.length * traitLineH + 4;
+  }
+  const cardBottomPad = 30;
+
+  const contentH = cardTopPad + codeToName + nameToNick + nickToChar
+                 + charFrameH + charToDivider + 1 + dividerToDescLabel
+                 + descLabelToBody + descBodyH + descToTraitLabel
+                 + traitLabelToBody + traitsBodyH + cardBottomPad;
+
+  const cardY = 150;
+  const cardH = contentH;
+  const footerH = 80;
+  const H = cardY + cardH + footerH;
+
+  // ---- 真正绘制 ----
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+
   // 背景
   ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, W, H);
 
   // 纸纹噪点
   ctx.globalAlpha = 0.08;
-  for (let i = 0; i < 600; i++) {
+  for (let i = 0; i < Math.floor(H * 0.65); i++) {
     ctx.fillStyle = Math.random() > 0.5 ? INK : MOSS;
     ctx.fillRect(Math.random() * W, Math.random() * H, 1, 1);
   }
@@ -1796,18 +1862,15 @@ async function renderPosterCanvas(type, p) {
   ctx.fillText('VSTI · 16型壁球人格鉴定', W/2, 122);
 
   // ---- 主卡片 ----
-  const cardX = 32, cardY = 150, cardW = W - 64, cardH = 740;
-  // 阴影
   ctx.fillStyle = MOSS_DEEP;
   ctx.fillRect(cardX + 7, cardY + 7, cardW, cardH);
-  // 卡片
   ctx.fillStyle = CREAM;
   ctx.fillRect(cardX, cardY, cardW, cardH);
   ctx.strokeStyle = INK;
   ctx.lineWidth = 2;
   ctx.strokeRect(cardX, cardY, cardW, cardH);
 
-  // CERTIFIED 角标（斜）
+  // CERTIFIED 角标
   ctx.save();
   ctx.translate(cardX + cardW - 70, cardY + 28);
   ctx.rotate(0.08);
@@ -1820,90 +1883,97 @@ async function renderPosterCanvas(type, p) {
   ctx.fillText('CERTIFIED', 0, 3);
   ctx.restore();
 
+  // ---- 垂直游标（对应 baseline）----
+  let y = cardY + cardTopPad;
+
   // 类型代码
   ctx.textAlign = 'center';
   ctx.fillStyle = MOSS;
   ctx.font = 'bold 14px "JetBrains Mono", monospace';
-  ctx.fillText(type.split('').join(' · '), W/2, cardY + 52);
+  ctx.fillText(type.split('').join(' · '), W/2, y);
+  y += codeToName;
 
   // 大名字
   ctx.fillStyle = INK;
-  ctx.font = '900 64px "Noto Serif SC", serif';
-  ctx.fillText(p.name, W/2, cardY + 118);
+  ctx.font = '900 60px "Noto Serif SC", serif';
+  ctx.fillText(p.name, W/2, y);
+  y += nameToNick;
 
   // 昵称
   ctx.fillStyle = BLOOD;
   ctx.font = 'italic 20px "Fraunces", serif';
-  ctx.fillText('"' + p.nick + '"', W/2, cardY + 148);
+  ctx.fillText('"' + p.nick + '"', W/2, y);
+  y += nickToChar;
 
-  // ---- 小人 SVG ----
+  // 小人框（y 现在是框顶）
+  const frameY = y;
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([4, 3]);
+  ctx.strokeRect(cardX + 40, frameY, cardW - 80, charFrameH - 10);
+  ctx.setLineDash([]);
+
+  // 小人 SVG
   const charSvg = characters[type];
   if (charSvg) {
     try {
       const charImg = await svgToImage(charSvg);
       const size = 200;
-      // 小人底部虚线框
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 1.2;
-      ctx.setLineDash([4, 3]);
-      ctx.strokeRect(cardX + 40, cardY + 170, cardW - 80, size + 10);
-      ctx.setLineDash([]);
-      ctx.drawImage(charImg, (W - size)/2, cardY + 175, size, size);
+      ctx.drawImage(charImg, (W - size)/2, frameY + 5, size, size);
     } catch (e) {
       console.warn('char draw fail', e);
     }
   }
+  y += charFrameH + charToDivider;
 
-  // 分隔
+  // 分隔线
   ctx.strokeStyle = MOSS;
   ctx.lineWidth = 0.8;
   ctx.setLineDash([3, 3]);
   ctx.beginPath();
-  ctx.moveTo(cardX + 30, cardY + 400);
-  ctx.lineTo(cardX + cardW - 30, cardY + 400);
+  ctx.moveTo(cardX + 30, y);
+  ctx.lineTo(cardX + cardW - 30, y);
   ctx.stroke();
   ctx.setLineDash([]);
+  y += dividerToDescLabel;
 
   // — 人格画像 —
   ctx.fillStyle = MOSS;
   ctx.font = 'bold 11px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('— 人 格 画 像 —', W/2, cardY + 430);
+  ctx.fillText('— 人 格 画 像 —', W/2, y);
+  y += descLabelToBody;
 
-  // 描述正文
+  // 描述正文（完整显示，不截断）
   ctx.fillStyle = INK;
   ctx.font = '15px "Noto Serif SC", serif';
   ctx.textAlign = 'left';
-  let descShort = p.desc;
-  if (Array.from(descShort).length > 130) {
-    descShort = Array.from(descShort).slice(0, 125).join('') + '...';
+  for (let i = 0; i < descLines.length; i++) {
+    ctx.fillText(descLines[i], cardX + 30, y);
+    if (i < descLines.length - 1) y += descLineH;
   }
-  const descLines = wrapText(ctx, descShort, cardW - 60);
-  let lineY = cardY + 460;
-  const lineH = 26;
-  for (const line of descLines.slice(0, 6)) {
-    ctx.fillText(line, cardX + 30, lineY);
-    lineY += lineH;
-  }
+  y += descToTraitLabel;
 
   // — 致命特征 —
-  const traitStartY = lineY + 16;
   ctx.fillStyle = MOSS;
   ctx.font = 'bold 11px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('— 致 命 特 征 —', W/2, traitStartY);
+  ctx.fillText('— 致 命 特 征 —', W/2, y);
+  y += traitLabelToBody;
 
+  // traits（每条完整显示，多行自动换行）
   ctx.textAlign = 'left';
-  let ty = traitStartY + 28;
-  for (const trait of p.traits) {
+  for (const tl of traitLines) {
     ctx.fillStyle = BLOOD;
     ctx.font = 'bold 14px serif';
-    ctx.fillText('✦', cardX + 30, ty);
+    ctx.fillText('✦', cardX + 30, y);
     ctx.fillStyle = INK;
     ctx.font = '13px "Noto Serif SC", serif';
-    const tLines = wrapText(ctx, trait, cardW - 80);
-    ctx.fillText(tLines[0] + (tLines.length > 1 ? '...' : ''), cardX + 50, ty);
-    ty += 24;
+    for (let i = 0; i < tl.length; i++) {
+      ctx.fillText(tl[i], cardX + 50, y);
+      if (i < tl.length - 1) y += traitLineH;
+    }
+    y += traitLineH + 4;  // 到下一条 trait 的起始位置
   }
 
   // ---- 底部 ----
